@@ -15,11 +15,11 @@ import os
 
 # Configuration
 CSV_PATH = "dataset_landmarks.csv"
-MODEL_PATH = "models/memotron_model.pth"
+MODEL_PATH = "memotron_models/memotron_model.pth"
 BATCH_SIZE = 16
 LEARNING_RATE = 0.001
 NUM_EPOCHS = 100
-VALIDATION_SPLIT = 0.2  # 20% pour la validation
+VALIDATION_SPLIT = 0.2
 
 
 class GestureDataset(Dataset):
@@ -30,7 +30,6 @@ class GestureDataset(Dataset):
         Args:
             csv_path: Chemin vers le fichier CSV contenant les landmarks
         """
-        # Charger le CSV
         self.data = pd.read_csv(csv_path)
         
         # Séparer les labels et les features
@@ -60,33 +59,28 @@ class GestureDataset(Dataset):
         return self.features.shape[1]
 
 
-class GestureClassifier(nn.Module):
-    """Réseau de neurones pour la classification de gestes."""
+class HumbleGestureClassifier(nn.Module):
+    """NN pour la classification de gestes."""
     
     def __init__(self, input_size, num_classes):
-        super(GestureClassifier, self).__init__()
+        super(HumbleGestureClassifier, self).__init__()
         
-        # Architecture du réseau
         self.network = nn.Sequential(
-            # Couche 1
             nn.Linear(input_size, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(),
             nn.Dropout(0.3),
             
-            # Couche 2
             nn.Linear(512, 256),
             nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Dropout(0.3),
             
-            # Couche 3
             nn.Linear(256, 128),
             nn.BatchNorm1d(128),
             nn.ReLU(),
             nn.Dropout(0.2),
             
-            # Couche de sortie
             nn.Linear(128, num_classes)
         )
     
@@ -113,7 +107,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
         
-        # Statistiques
+        # Stats
         running_loss += loss.item()
         _, predicted = torch.max(outputs.data, 1)
         total += labels.size(0)
@@ -139,7 +133,7 @@ def validate(model, val_loader, criterion, device):
             outputs = model(features)
             loss = criterion(outputs, labels)
             
-            # Statistiques
+            # Stats
             running_loss += loss.item()
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
@@ -202,43 +196,37 @@ def compute_class_accuracy(model, val_loader, device, label_encoder):
 def train_model():
     """Fonction principale d'entraînement."""
     
-    # Vérifier la disponibilité du GPU
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Utilisation du device: {device}")
     
-    # Charger le dataset
     print("\nChargement du dataset...")
     full_dataset = GestureDataset(CSV_PATH)
     
-    # Diviser en train et validation
+    # DIvision du dataset en train et validation
     train_size = int((1 - VALIDATION_SPLIT) * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
     print(f"\nTaille du dataset d'entraînement: {train_size}")
     print(f"Taille du dataset de validation: {val_size}")
-    
-    # Créer les DataLoaders
+
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
     
-    # Créer le modèle
     num_features = full_dataset.get_num_features()
     num_classes = full_dataset.get_num_classes()
-    model = GestureClassifier(num_features, num_classes).to(device)
+    model = HumbleGestureClassifier(num_features, num_classes).to(device)
     
     print(f"\nModèle créé avec {num_features} features et {num_classes} classes")
     print(f"Nombre de paramètres: {sum(p.numel() for p in model.parameters())}")
-    
-    # Loss et optimizer
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     
     # Variable pour suivre le meilleur modèle
     best_val_acc = 0.0
     
-    # Créer le dossier models s'il n'existe pas
-    os.makedirs("models", exist_ok=True)
+    # os.makedirs("models", exist_ok=True)
     
     # Entraînement
     print("\n" + "="*60)
@@ -246,13 +234,9 @@ def train_model():
     print("="*60)
     
     for epoch in range(NUM_EPOCHS):
-        # Entraînement
         train_loss, train_acc = train_epoch(model, train_loader, criterion, optimizer, device)
-        
-        # Validation
         val_loss, val_acc = validate(model, val_loader, criterion, device)
         
-        # Affichage
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}] | "
               f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}% | "
               f"Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%", end="")
