@@ -29,10 +29,22 @@ POSE_CONNEXIONS = [(11,12), (11,13), (13,15), (12,14),
 
 FACE_CONNEXIONS = [(336,296), (296,334), (334,293), (293,300), # Haut sourcil gauche
                    (285,295), (295,282), (282,283), (283,276), # Bas sourcil gauche
+                   (70,156), (156,46), (300,383), (383,276), # Pointe des sourcils
                    (107,66), (66,105), (105,63), (63,70), # Haut sourcil droit
                    (55,65), (65,52), (52,53), (53,46), # Bas sourcil droit
+                   (78,191), (191,80), (80,81), (81,82), (82,13), (13,312), (312,311), (311,310), (310, 415), (415,308), # Sous lèvre supérieure
+                   (78,95), (95,88), (88,178), (178,87), (87,14), (14, 317), (317,402), (402,318), (318,324), (324,308) # Sous lèvre inférieure
                    ]
-
+# FACE_USED_LANDMARKS1 = [k[0] for k in FACE_CONNEXIONS]
+# FACE_USED_LANDMARKS2 = [k[1] for k in FACE_CONNEXIONS]
+# FACE_USED_LANDMARKS = [*set(FACE_USED_LANDMARKS1 + FACE_USED_LANDMARKS2)]
+# FACE_USED_LANDMARKS.sort()
+# print(FACE_USED_LANDMARKS)
+# HEHEHE
+FACE_USED_LANDMARKS = [13, 14, 46, 52, 53, 55, 63, 65, 66, 70, 78, 80, 81, 82, 
+                       87, 88, 95, 105, 107, 156, 178, 191, 276, 282, 283, 285, 
+                       293, 295, 296, 300, 308, 310, 311, 312, 317, 318, 324, 
+                       334, 336, 383, 402, 415]
 
 def get_nose_position(pose_landmarks):
     """Récupère la position du nez (point 0) pour la normalisation."""
@@ -70,3 +82,38 @@ def normalize_landmark2(landmark, distance):
         landmark.y / distance,
         landmark.z / distance
     )
+
+def normalize_landmark3(landmark, center_x, center_y, center_z, scale):
+    """Normalise un landmark par rapport à un centre et une échelle."""
+    if scale == 0:
+        return landmark.x, landmark.y, landmark.z
+    return (
+        (landmark.x - center_x) / scale,
+        (landmark.y - center_y) / scale,
+        (landmark.z - center_z) / scale
+    )
+def get_eyes_distance(pose_landmarks):
+    """Calcule la distance entre les yeux gauche et droit."""
+    if pose_landmarks and len(pose_landmarks) > 0:
+        left_eye = pose_landmarks[0][1]  # Oeil gauche
+        right_eye = pose_landmarks[0][4]  # Oeil droit
+        distance = ((left_eye.x - right_eye.x) ** 2 + 
+                    (left_eye.y - right_eye.y) ** 2 + 
+                    (left_eye.z - right_eye.z) ** 2) ** 0.5
+        return distance
+    return 1.0  # Valeur par défaut si pas de pose détectée
+
+def normalize_face_landmarks(face_landmarks, nose_x, nose_y, nose_z, eyes_distance):
+    """Normalise les landmarks du visage.
+       Besoin d'une normalisation spécifique car les distances sont très petites.
+    """
+    normalized = []
+    for landmark in face_landmarks:
+        norm_landmark = normalize_landmark(landmark, nose_x, nose_y, nose_z)
+        norm_landmark = (
+            norm_landmark[0] / eyes_distance,
+            norm_landmark[1] / eyes_distance,
+            norm_landmark[2] / eyes_distance
+        )
+        normalized.append((norm_landmark[0]*2, norm_landmark[1]*2, norm_landmark[2]*2))
+    return normalized
