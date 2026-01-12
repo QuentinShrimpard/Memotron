@@ -18,6 +18,7 @@ import utilities
 # Chemins des modèles
 HAND_MODEL_PATH = "models/hand_landmarker2.task"
 POSE_MODEL_PATH = "models/pose_landmarker_full.task"
+FACE_MODEL_PATH = "models/face_landmarker.task"
 PHOTOS_ROOT = "LesPhotos"
 OUTPUT_CSV = "dataset_landmarks.csv"
 
@@ -25,13 +26,14 @@ OUTPUT_CSV = "dataset_landmarks.csv"
 NUM_HAND_LANDMARKS = 21  # Par main
 NUM_POSE_LANDMARKS = 33
 POSE_LANDMARKS_TO_USE = list(range(11, 25))  # Épaules (11,12) jusqu'aux hanches (23,24)
+FACE_LANDMARKS_TO_USE = utilities.FACE_USED_LANDMARKS  # Landmarks spécifiques du visage
 
 # Configuration du filtrage par nombre de mains détectées
 # Format: {"label": nombre_de_mains_requis}
 # Si None ou absent, aucun filtrage n'est appliqué
 HAND_COUNT_FILTER = {
-    # "Uwu": 2,      # Uwu nécessite 2 mains détectées
-    "Pouce": 1,    # Pouce nécessite exactement 1 main détectée
+    # "Uwu": 2, 
+    "Pouce": 1,
     # "AbsoluteCinema":2,
     "Nerd": 1,
     "Silence":1,
@@ -58,7 +60,17 @@ def create_pose_landmarker():
     return vision.PoseLandmarker.create_from_options(options)
 
 
-def add_noise(value, noise_level=0.02):
+def create_face_landmarker():
+    """Crée le détecteur de landmarks de visage."""
+    base_options = python.BaseOptions(model_asset_path=FACE_MODEL_PATH)
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options,
+        num_faces=1
+    )
+    return vision.FaceLandmarker.create_from_options(options)
+
+
+def add_noise(value, noise_level=0.01):
     """
     Ajoute du bruit gaussien à une valeur.
     
@@ -176,10 +188,10 @@ def augment_csv_data(csv_path, output_path=None, target_samples=None, noise_leve
 
 
 
-def extract_landmarks(image_path, hand_landmarker, pose_landmarker):
+def extract_landmarks(image_path, hand_landmarker, pose_landmarker, face_landmarker):
     """
-    Extrait les landmarks de main et de pose d'une image.
-    Retourne une liste de valeurs normalisées par rapport au nez.
+    Extrait les landmarks de main, de pose et de visage d'une image.
+    Retourne une liste de valeurs normalisées par rapport au nez.q
     Retourne également le nombre de mains détectées.
     """
     # Charger l'image
@@ -195,6 +207,9 @@ def extract_landmarks(image_path, hand_landmarker, pose_landmarker):
     # Détecter les landmarks de main
     hand_result = hand_landmarker.detect(image)
     
+    # Détecter les landmarks de visage
+    face_result = face_landmarker.detect(image)
+    
     # Compter le nombre de mains détectées
     num_hands_detected = len(hand_result.hand_landmarks) if hand_result.hand_landmarks else 0
     
@@ -204,7 +219,8 @@ def extract_landmarks(image_path, hand_landmarker, pose_landmarker):
         if hand_idx < len(hand_result.hand_landmarks):
             for landmark in hand_result.hand_landmarks[hand_idx]:
                 # x, y, z = utilities.normalize_landmark(landmark, nose_x, nose_y, nose_z)
-                x, y, z = utilities.normalize_landmark2(landmark, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                # x, y, z = utilities.normalize_landmark2(landmark, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                x, y, z = utilities.normalize_landmark3(landmark, nose_x, nose_y, nose_z, utilities.get_shoulders_distance(pose_result.pose_landmarks))
                 hand_values.extend([x, y, z])
         else:
             # Remplir avec des zéros si main non détectée
@@ -218,7 +234,8 @@ def extract_landmarks(image_path, hand_landmarker, pose_landmarker):
             if idx < len(pose_landmarks):
                 landmark = pose_landmarks[idx]
                 # x, y, z = utilities.normalize_landmark(landmark, nose_x, nose_y, nose_z)
-                x, y, z = utilities.normalize_landmark2(landmark, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                # x, y, z = utilities.normalize_landmark2(landmark, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                x, y, z = utilities.normalize_landmark3(landmark, nose_x, nose_y, nose_z, utilities.get_shoulders_distance(pose_result.pose_landmarks))
                 pose_values.extend([x, y, z])
             else:
                 pose_values.extend([0.0, 0.0, 0.0])
@@ -226,7 +243,25 @@ def extract_landmarks(image_path, hand_landmarker, pose_landmarker):
         # Remplir avec des zéros si pose non détectée
         pose_values.extend([0.0] * (len(POSE_LANDMARKS_TO_USE) * 3))
     
-    return hand_values + pose_values, num_hands_detected
+    # Extraire les landmarks du visage (uniquement les points spécifiés)
+    face_values = []
+    if face_result.face_landmarks and len(face_result.face_landmarks) > 0:
+        face_landmarks = face_result.face_landmarks[0]
+        for idx in FACE_LANDMARKS_TO_USE:
+            if idx < len(face_landmarks):
+                landmark = face_landmarks[idx]
+                # x, y, z = utilities.normalize_landmark(landmark, nose_x, nose_y, nose_z)
+                # x, y, z = utilities.normalize_landmark2(landmark, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                # x, y, z = utilities.normalize_landmark3(landmark, nose_x, nose_y, nose_z, utilities.get_shoulders_distance(pose_result.pose_landmarks))
+                x, y, z = utilities.normalize_face_landmarks([landmark], nose_x, nose_y, nose_z, utilities.get_eyes_distance(pose_result.pose_landmarks))[0]
+                face_values.extend([x, y, z])
+            else:
+                face_values.extend([0.0, 0.0, 0.0])
+    else:
+        # Remplir avec des zéros si visage non détecté
+        face_values.extend([0.0] * (len(FACE_LANDMARKS_TO_USE) * 3))
+    
+    return hand_values + pose_values + face_values, num_hands_detected
 
 
 def should_keep_image(label, num_hands_detected):
@@ -270,6 +305,14 @@ def generate_header():
             f"pose_point{i}_z"
         ])
     
+    # Colonnes pour les landmarks du visage (uniquement les points spécifiés)
+    for i in FACE_LANDMARKS_TO_USE:
+        header.extend([
+            f"face_point{i}_x",
+            f"face_point{i}_y",
+            f"face_point{i}_z"
+        ])
+    
     return header
 
 
@@ -278,6 +321,7 @@ def process_photos(photos_root, output_csv):
     # Créer les détecteurs
     hand_landmarker = create_hand_landmarker()
     pose_landmarker = create_pose_landmarker()
+    face_landmarker = create_face_landmarker()
     
     # Préparer les données
     rows = []
@@ -313,7 +357,7 @@ def process_photos(photos_root, output_csv):
                 stats[label]["total"] += 1
                 
                 # Extraire les landmarks et le nombre de mains
-                landmarks, num_hands_detected = extract_landmarks(image_path, hand_landmarker, pose_landmarker)
+                landmarks, num_hands_detected = extract_landmarks(image_path, hand_landmarker, pose_landmarker, face_landmarker)
                 
                 # Vérifier si l'image doit être conservée
                 if should_keep_image(label, num_hands_detected):
@@ -332,6 +376,7 @@ def process_photos(photos_root, output_csv):
     # Fermer les détecteurs
     hand_landmarker.close()
     pose_landmarker.close()
+    face_landmarker.close()
     
     # Écrire le fichier CSV
     header = generate_header()
