@@ -1,0 +1,22 @@
+{
+  "best_params": {
+    "batch_size": 32,
+    "learning_rate": 0.00023882934026139894,
+    "weight_decay": 0.00019897350710605533,
+    "optimizer": "RMSprop",
+    "n_layers": 2,
+    "initial_hidden_size": 832,
+    "dropout_0": 0.23356313156436562,
+    "layer_1_ratio": 0.6184965343849418,
+    "dropout_1": 0.25113690731033855,
+    "use_batch_norm": true,
+    "activation": "gelu",
+    "use_scheduler": true,
+    "scheduler": "StepLR",
+    "step_size": 7,
+    "gamma": 0.7798168966492405
+  },
+  "best_value": 97.86585365853658,
+  "n_trials": 100,
+  "timestamp": "2026-01-12T15:01:18.429028"
+}
